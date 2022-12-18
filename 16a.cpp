@@ -17,90 +17,107 @@ using namespace std;
 regex lineRegex("Valve (\\w+) has flow rate=(\\d+); tunnels? leads? to valves? (.+)");
 regex toRegex("(\\w+)");
 
-struct Setup {
-    int nz;
-    int no;
-    unordered_map<string, int> mp;
-    unordered_map<string, int> stateful;
-    unordered_map<string, int> flows;
-    unordered_map<string, vector<string>> graph;
-
-    Setup(): nz(0), no(0) {}
-};
-
 struct Search {
+    const int MAX_TIME = 30;
     int best;
-    unordered_map<int, int> bestByState;
-    Setup& setup;
+    unordered_map<int, int> bestByState;    
+    const vector<int>& flow;
+    const vector<vector<int>>& graph;
+    int maxValveState;
 
-    Search(Setup& setup): best(0), setup(setup) {}
+    Search(const vector<int>& flow, const vector<vector<int>>& graph): best(0), flow(flow), graph(graph) {
+        maxValveState = 0;
+        for (int  i = 0; i < flow.size() && flow[i] > 0; i++)
+            maxValveState |= (1 << i);
+    }
 
-    void dfs(const string& valve, int time, int valveState, int release, int totalRelease) {        
+    void search(int pos, int time, int valveState, int release, int totalRelease) {        
         totalRelease += release;
-        if (time >= 30) {
+        if (time >= MAX_TIME || valveState == maxValveState) {            
+            totalRelease += (MAX_TIME - time) * release;
             best = max(best, totalRelease);
             return;
         }
         
-        auto state = (valveState << 11) | (time << 6) | setup.mp[valve];
+        auto state = (valveState << 11) | (time << 6) | pos;
         auto bestIt = bestByState.find(state);
         if (bestIt != bestByState.end() && totalRelease <= bestIt->second) {
             return; // prune
         }
         bestByState[state] = totalRelease;
 
-        // try open
-        const auto statefulIt = setup.stateful.find(valve);
-        if (statefulIt != setup.stateful.end()) {
-            auto valveNo = statefulIt->second;
+        for (auto next: graph[pos]) {
+            auto nextValveState = valveState;
+            auto nextRelease = release;
 
-            if ((valveState & (1 << valveNo)) == 0) {
-                auto nextValveState = valveState | (1 << valveNo);
-                auto nextRelease = release + setup.flows.at(valve);
+            if (next == pos) {
+                if (flow[pos] == 0 || (valveState & (1 << pos)) != 0) continue;
 
-                dfs(valve, time + 1, nextValveState, nextRelease, totalRelease);
+                nextValveState |= (1 << pos);
+                nextRelease += flow[pos];
             }
-        }
 
-        // move
-        for (const auto& nextValve: setup.graph.at(valve)) {
-            dfs(nextValve, time + 1, valveState, release, totalRelease);
+            search(next, time + 1, nextValveState, nextRelease, totalRelease);
         }
     }
 };
 
 int main()
 {
-    //fstream in("input_test");    
-    fstream in("input");
+    fstream in("input_test");    
+    //fstream in("input");
         
     string s;
     
-    Setup setup;
+    vector<string> valves;
+    unordered_map<string, int> flows_string;
+    unordered_map<string, vector<string>> adjacent;
     while (getline(in, s)) {
         smatch match;
         if (regex_match(s, match, lineRegex)) {
             auto valve = match[1];
+            valves.emplace_back(valve);
+
             auto flow = stoi(match[2]);
-
-            setup.mp[valve] = setup.no++;
-            if (flow > 0) {
-                setup.stateful[valve] = setup.nz++;
-            }
-
-            setup.flows[valve] = flow;
+            flows_string[valve] = flow;
 
             auto to = match[3].str();
 
             auto match_begin = sregex_iterator(to.cbegin(), to.cend(), toRegex);
             auto match_end = sregex_iterator();
             for (auto it = match_begin; it != match_end; it++) {
-                setup.graph[valve].emplace_back(it->str());
+                adjacent[valve].emplace_back(it->str());
             }
         }    
     }
-    Search search(setup);
-    search.dfs("AA", 1, 0, 0, 0);
+    sort(valves.begin(), valves.end(), [&flows_string](auto a, auto b) {
+        return flows_string[a] > flows_string[b];
+    });
+
+    unordered_map<string, int> valveNo;
+    for (int i = 0; i < valves.size(); i++) valveNo[valves[i]] = i;
+
+    vector<int> flow(valves.size());
+    for (int i = 0; i < valves.size(); i++)
+        flow[i] = flows_string[valves[i]];
+
+    vector<vector<int>> graph(valves.size());
+    for (const auto& [vs, adj]: adjacent) {
+        auto vNo = valveNo[vs];
+        for (const auto& as: adj) {
+            auto avNo = valveNo[as];
+            graph[vNo].emplace_back(avNo);
+        }
+        graph[vNo].emplace_back(vNo);
+    }
+
+    Search search(flow, graph);
+    
+    auto start = chrono::system_clock::now();
+    search.search(valveNo["AA"], 1, 0, 0, 0);
+    auto end = chrono::system_clock::now();
+
     cout << search.best << endl;
+    cout << "in time " << chrono::duration_cast<std::chrono::milliseconds>(end-start).count() << "ms" << endl;
     return 0;        
 }
