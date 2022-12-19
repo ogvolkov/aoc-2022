@@ -14,9 +14,6 @@
 
 using namespace std;
 
-regex lineRegex("Valve (\\w+) has flow rate=(\\d+); tunnels? leads? to valves? (.+)");
-regex toRegex("(\\w+)");
-
 struct Search {
     const int MAX_TIME = 30;
     int nz;
@@ -25,21 +22,37 @@ struct Search {
     const vector<int>& flow;
     const vector<vector<int>>& graph;
     const vector<string>& valves;
-    int maxValveState;
+    int maxMask;
 
     Search(int nz, const vector<int>& flow, const vector<vector<int>>& graph, const vector<string>& valves)
         : nz(nz), best(0), flow(flow), graph(graph), valves(valves) {
-        maxValveState = (1 << nz) - 1;        
+        maxMask = (1 << nz) - 1;        
     }
 
-    void search(int pos, int time, int valveState, int release, int totalRelease) {       
-        if (time >= MAX_TIME || valveState == maxValveState) {    
-            totalRelease += (MAX_TIME - time + 1) * release;
+    int calcTotalRelease(int time, const vector<int>& valveState) {
+        int totalRelease = 0;
+        for (int i = 0; i < nz; i++)
+            if (valveState[i] != 0) totalRelease += (time - valveState[i]) * flow[i];
+        return totalRelease;
+    }
+
+    int calcMask(const vector<int>& valveState) {
+        int mask = 0;
+        for (int i = 0; i < nz; i++)
+            if (valveState[i] != 0) mask |= (1 << i);            
+        return mask;            
+    }
+
+    void search(int pos, int time, vector<int>& valveState) { 
+        auto mask = calcMask(valveState);
+        if (time >= MAX_TIME || mask == maxMask) {    
+            auto totalRelease = calcTotalRelease(MAX_TIME, valveState);
             best = max(best, totalRelease);
             return;
         }
         
-        auto state = (valveState << 11) | (time << 6) | pos;
+        auto totalRelease = calcTotalRelease(time, valveState);
+        auto state = (mask << 11) | (time << 6) | pos;
         auto bestIt = bestByState.find(state);
         if (bestIt != bestByState.end() && totalRelease <= bestIt->second) {
             return; // prune
@@ -47,8 +60,10 @@ struct Search {
         bestByState[state] = totalRelease;
 
         // turn valve if possible
-        if ((valveState & (1 << pos)) == 0) {
-            search(pos, time + 1, valveState | (1 << pos), release + flow[pos], totalRelease + release);                
+        if (valveState[pos] == 0) {
+            valveState[pos] = time;
+            search(pos, time + 1, valveState);
+            valveState[pos] = 0;
             return;
         }
 
@@ -56,10 +71,14 @@ struct Search {
         for (int next = 0; next < nz; next++)
             if (next != pos) {
                 auto nextTime = min(MAX_TIME, time + graph[pos][next]);
-                search(next, nextTime, valveState, release, totalRelease + release * (nextTime - time));
+                search(next, nextTime, valveState);
             }                    
     }
 };
+
+
+regex lineRegex("Valve (\\w+) has flow rate=(\\d+); tunnels? leads? to valves? (.+)");
+regex toRegex("(\\w+)");
 
 int main()
 {
@@ -126,7 +145,8 @@ int main()
     auto from = valveNo["AA"];
     auto start = chrono::system_clock::now();
     for (int i = 0; i < nz; i++) {
-        search.search(i, 1 + dist[from][i], 0, 0, 0);
+        vector<int> valveState(nz);
+        search.search(i, 1 + dist[from][i], valveState);
     }
     auto end = chrono::system_clock::now();
 
