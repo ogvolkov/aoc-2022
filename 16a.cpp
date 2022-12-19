@@ -19,22 +19,22 @@ regex toRegex("(\\w+)");
 
 struct Search {
     const int MAX_TIME = 30;
+    int nz;
     int best;
     unordered_map<int, int> bestByState;    
     const vector<int>& flow;
     const vector<vector<int>>& graph;
+    const vector<string>& valves;
     int maxValveState;
 
-    Search(const vector<int>& flow, const vector<vector<int>>& graph): best(0), flow(flow), graph(graph) {
-        maxValveState = 0;
-        for (int  i = 0; i < flow.size() && flow[i] > 0; i++)
-            maxValveState |= (1 << i);
+    Search(int nz, const vector<int>& flow, const vector<vector<int>>& graph, const vector<string>& valves)
+        : nz(nz), best(0), flow(flow), graph(graph), valves(valves) {
+        maxValveState = (1 << nz) - 1;        
     }
 
-    void search(int pos, int time, int valveState, int release, int totalRelease) {        
-        totalRelease += release;
-        if (time >= MAX_TIME || valveState == maxValveState) {            
-            totalRelease += (MAX_TIME - time) * release;
+    void search(int pos, int time, int valveState, int release, int totalRelease) {       
+        if (time >= MAX_TIME || valveState == maxValveState) {    
+            totalRelease += (MAX_TIME - time + 1) * release;
             best = max(best, totalRelease);
             return;
         }
@@ -46,19 +46,18 @@ struct Search {
         }
         bestByState[state] = totalRelease;
 
-        for (auto next: graph[pos]) {
-            auto nextValveState = valveState;
-            auto nextRelease = release;
-
-            if (next == pos) {
-                if (flow[pos] == 0 || (valveState & (1 << pos)) != 0) continue;
-
-                nextValveState |= (1 << pos);
-                nextRelease += flow[pos];
-            }
-
-            search(next, time + 1, nextValveState, nextRelease, totalRelease);
+        // turn valve if possible
+        if ((valveState & (1 << pos)) == 0) {
+            search(pos, time + 1, valveState | (1 << pos), release + flow[pos], totalRelease + release);                
+            return;
         }
+
+        // move
+        for (int next = 0; next < nz; next++)
+            if (next != pos) {
+                auto nextTime = min(MAX_TIME, time + graph[pos][next]);
+                search(next, nextTime, valveState, release, totalRelease + release * (nextTime - time));
+            }                    
     }
 };
 
@@ -94,30 +93,44 @@ int main()
         return flows_string[a] > flows_string[b];
     });
 
-    unordered_map<string, int> valveNo;
-    for (int i = 0; i < valves.size(); i++) valveNo[valves[i]] = i;
-
+    unordered_map<string, int> valveNo;    
+    for (int i = 0; i < valves.size(); i++)
+        valveNo[valves[i]] = i;
+        
     vector<int> flow(valves.size());
     for (int i = 0; i < valves.size(); i++)
         flow[i] = flows_string[valves[i]];
-
-    vector<vector<int>> graph(valves.size());
+    
+    vector<vector<int>> dist (valves.size(), vector<int>(valves.size(), 100));
+    for (int i = 0; i < valves.size(); i++) dist[i][i] = 0;
+    
     for (const auto& [vs, adj]: adjacent) {
         auto vNo = valveNo[vs];
         for (const auto& as: adj) {
             auto avNo = valveNo[as];
-            graph[vNo].emplace_back(avNo);
-        }
-        graph[vNo].emplace_back(vNo);
+            dist[vNo][avNo] = 1;
+            dist[avNo][vNo] = 1;            
+        }        
     }
 
-    Search search(flow, graph);
+    for (int k = 0; k < valves.size(); k++)
+        for (int i = 0; i < valves.size(); i++)
+            for (int j = 0; j < valves.size(); j++)
+                dist[i][j] = min(dist[i][j], dist[i][k] + dist[k][j]);
+
+    int nz = 0;
+    for (auto f: flow) if (f > 0) nz++;
+
+    Search search(nz, flow, dist, valves);
     
+    auto from = valveNo["AA"];
     auto start = chrono::system_clock::now();
-    search.search(valveNo["AA"], 1, 0, 0, 0);
+    for (int i = 0; i < nz; i++) {
+        search.search(i, 1 + dist[from][i], 0, 0, 0);
+    }
     auto end = chrono::system_clock::now();
 
     cout << search.best << endl;
     cout << "in time " << chrono::duration_cast<std::chrono::milliseconds>(end-start).count() << "ms" << endl;
-    return 0;        
+    return 0;
 }
