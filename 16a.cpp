@@ -28,31 +28,17 @@ struct Search {
         : nz(nz), best(0), flow(flow), graph(graph), valves(valves) {
         maxMask = (1 << nz) - 1;        
     }
-
-    int calcTotalRelease(int time, const vector<int>& valveState) {
-        int totalRelease = 0;
-        for (int i = 0; i < nz; i++)
-            if (valveState[i] != 0) totalRelease += (time - valveState[i]) * flow[i];
-        return totalRelease;
-    }
-
-    int calcMask(const vector<int>& valveState) {
-        int mask = 0;
-        for (int i = 0; i < nz; i++)
-            if (valveState[i] != 0) mask |= (1 << i);            
-        return mask;            
-    }
-
-    void search(int pos, int time, vector<int>& valveState) { 
-        auto mask = calcMask(valveState);
-        if (time >= MAX_TIME || mask == maxMask) {    
-            auto totalRelease = calcTotalRelease(MAX_TIME, valveState);
-            best = max(best, totalRelease);
+    
+    void search(int pos, int time, int valveState, int totalRelease) {     
+        if (time == MAX_TIME || valveState == maxMask) {    
+            if (totalRelease > best) {
+                cout << "new record: " << totalRelease << endl;
+                best = totalRelease;
+            }            
             return;
         }
         
-        auto totalRelease = calcTotalRelease(time, valveState);
-        auto state = (mask << 11) | (time << 6) | pos;
+        auto state = (valveState << 12) | (time << 6)  | pos;
         auto bestIt = bestByState.find(state);
         if (bestIt != bestByState.end() && totalRelease <= bestIt->second) {
             return; // prune
@@ -60,19 +46,17 @@ struct Search {
         bestByState[state] = totalRelease;
 
         // turn valve if possible
-        if (valveState[pos] == 0) {
-            valveState[pos] = time;
-            search(pos, time + 1, valveState);
-            valveState[pos] = 0;
-            return;
+        if ((valveState & (1 << pos)) == 0) {
+            auto nextTotalRelease = totalRelease + (MAX_TIME - time) * flow[pos];
+            search(pos, time + 1, valveState | (1 << pos), nextTotalRelease);            
         }
-
+        
         // move
         for (int next = 0; next < nz; next++)
             if (next != pos) {
                 auto nextTime = min(MAX_TIME, time + graph[pos][next]);
-                search(next, nextTime, valveState);
-            }                    
+                search(next, nextTime, valveState, totalRelease);
+            }            
     }
 };
 
@@ -82,8 +66,8 @@ regex toRegex("(\\w+)");
 
 int main()
 {
-    fstream in("input_test");    
-    //fstream in("input");
+    //fstream in("input_test");    
+    fstream in("input");
         
     string s;
     
@@ -144,9 +128,8 @@ int main()
     
     auto from = valveNo["AA"];
     auto start = chrono::system_clock::now();
-    for (int i = 0; i < nz; i++) {
-        vector<int> valveState(nz);
-        search.search(i, 1 + dist[from][i], valveState);
+    for (int i = 0; i < nz; i++) {            
+        search.search(i, 1 + dist[from][i], 0, 0);
     }
     auto end = chrono::system_clock::now();
 
