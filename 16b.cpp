@@ -18,7 +18,7 @@ struct Search {
     const int MAX_TIME = 26;
     int nz;
     int best;
-    unordered_map<long, int> bestByState;    
+    unordered_map<int, int> bestByState;    
     const vector<int>& flow;
     const vector<vector<int>>& graph;
     const vector<string>& valves;
@@ -30,17 +30,15 @@ struct Search {
     }
     
     void search(int pos1, int time1, int pos2, int time2, int valveState, int totalRelease) {     
-        if (pos1 > pos2) return;
-          
         if ((time1 == MAX_TIME && time2 == MAX_TIME) || valveState == maxMask) {    
             if (totalRelease > best) {
-                // cout << "new record: " << totalRelease << endl;
+                cout << "new record: " << totalRelease << endl;
                 best = totalRelease;
             }            
             return;
         }
         
-        auto state = (valveState << 22) | (time2 << 17) | (time1 << 12)  | (pos2 << 6) | pos1;
+        auto state = (time2 << 17) | (time1 << 12)  | (pos2 << 6) | pos1;
         auto bestIt = bestByState.find(state);
         if (bestIt != bestByState.end() && totalRelease <= bestIt->second) {
             return; // prune
@@ -50,14 +48,12 @@ struct Search {
         // turn valve if possible
         if ((valveState & (1 << pos1)) == 0) {
             auto nextTotalRelease = totalRelease + (MAX_TIME - time1) * flow[pos1];
-            search(pos1, time1 + 1, pos2, time2, valveState | (1 << pos1), nextTotalRelease);
-            return;
+            search(pos1, time1 + 1, pos2, time2, valveState | (1 << pos1), nextTotalRelease);            
         }
-
+        
         if ((valveState & (1 << pos2)) == 0) {
             auto nextTotalRelease = totalRelease + (MAX_TIME - time2) * flow[pos2];
-            search(pos1, time1, pos2, time2 + 1, valveState | (1 << pos2), nextTotalRelease);
-            return;
+            search(pos1, time1, pos2, time2 + 1, valveState | (1 << pos2), nextTotalRelease);            
         }
 
 
@@ -81,8 +77,8 @@ regex toRegex("(\\w+)");
 
 int main()
 {
-    fstream in("input_test");    
-    //fstream in("input");
+    //fstream in("input_test");    
+    fstream in("input");
         
     string s;
     
@@ -144,8 +140,8 @@ int main()
     auto from = valveNo["AA"];
     auto start = chrono::system_clock::now();
     for (int i = 0; i < nz; i++) 
-        for (int j = i+1; j < nz; j++) {
-            // cout << "start at " << i << ", " << j << " (out of " << nz << ", " << nz << ")" << endl;
+        for (int j = 0; j < nz; j++) {
+            cout << "start at " << i << ", " << j << " (out of " << nz << ", " << nz << ")" << endl;
             search.search(i, 1 + dist[from][i], j, 1 + dist[from][j], 0, 0);
     }
     auto end = chrono::system_clock::now();
