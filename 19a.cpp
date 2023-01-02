@@ -32,48 +32,45 @@ const int MAX_TIME = 24;
 
 const vector<string> resourceNames = { "ore", "clay", "obsidian", "geode"};
 
-void updateResources(vector<int>& resources, const vector<int>& robots) {
-    for (int r = 0; r < RESOURCE_COUNT; r++)
-        resources[r] += robots[r];
-}
+void search(int time, int& best, vector<int>& resources, vector<int>& robots, const Blueprint& blueprint, unordered_set<long long>& seen) {    
+    if (time > MAX_TIME) return;
 
-void search(int time, int& best, vector<int> resources, vector<int> robots, const Blueprint& blueprint, const vector<int>& maxStuff) {
-    if (false) {
-        cout << time << " resources ";
-        for (int r = 0; r < RESOURCE_COUNT; r++) cout << resourceNames[r] << ":" << setw(2) << resources[r] << " ";
-        cout << " robots ";
-        for (int r = 0; r < RESOURCE_COUNT; r++) cout << resourceNames[r] << ":" << setw(2) << robots[r] << " ";
-        cout << " best=" << best << endl;
+    long long key = 0;
+    for (int r = 0; r < RESOURCE_COUNT; r++) {
+        key = (key << 5) | resources[r];
+        key = (key << 5) | robots[r];
     }
-    if (time > MAX_TIME) {
-        if (resources[Geode] > best) {
-            best = resources[Geode];
-            cout << best << endl;
-        }
-        return;
-    }
+    if (seen.count(key) > 0) return;
+    seen.insert(key);
 
-    for (int robot = RESOURCE_COUNT-1; robot >= 0; robot--) {
-        if (robots[robot] == maxStuff[robot]) continue;
-        if (resources[robot] - blueprint[robot][robot] >= maxStuff[robot]) continue;
+    for (; time <= MAX_TIME; time++) {
+        for (int robot = 0; robot < RESOURCE_COUNT; robot++) {
+            if (robot == Ore && robots[Ore] >= 4) continue;
+            if (robot == Clay && robots[Clay] >= 20) continue;
+            if (robot == Obsidian && robots[Obsidian] >= 20) continue;
 
-        vector<int> newResources(resources);        
-        bool possible = true;
-        for (int r = 0; r < RESOURCE_COUNT && possible; r++) {
-            newResources[r] -= blueprint[robot][r];
-            if (newResources[r] < 0) possible = false;
+            auto possible = true;
+            for (int r = 0; r < RESOURCE_COUNT; r++)
+                if (resources[r] < blueprint[robot][r]) possible = false;
+
+            if (possible) {                
+                auto newResources = resources;
+                for (int r = 0; r < RESOURCE_COUNT; r++) newResources[r] += robots[r];
+                for (int r = 0; r < RESOURCE_COUNT; r++) newResources[r] -= blueprint[robot][r];
+
+                auto newRobots = robots;
+                newRobots[robot]++;
+                search(time+1, best, newResources, newRobots, blueprint, seen);
+            }
         }
-        if (possible) {
-            updateResources(newResources, robots);
-            vector<int> newRobots(robots);
-            newRobots[robot]++;            
-            search(time + 1, best, newResources, newRobots, blueprint, maxStuff);
-            if (robot == Geode) return;
-        }
+
+        for (int r = 0; r < RESOURCE_COUNT; r++) resources[r] += robots[r];
     }
 
-    updateResources(resources, robots);
-    search(time + 1, best, resources, robots, blueprint, maxStuff);
+    if (resources[Geode] > best) {
+        best = resources[Geode];
+        cout << "new best " << best << endl;
+    } 
 }
 
 int eval(const Blueprint& blueprint) {    
@@ -81,13 +78,8 @@ int eval(const Blueprint& blueprint) {
     vector<int> resources(RESOURCE_COUNT);
     vector<int> robots(RESOURCE_COUNT);
     robots[Ore] = 1;
-    vector<int> maxStuff(RESOURCE_COUNT);
-    maxStuff[Geode] = numeric_limits<int>::max();
-    for (const auto& composition: blueprint)
-        for (int r = 0; r < RESOURCE_COUNT; r++)
-            maxStuff[r] = max(maxStuff[r], composition[r]);            
-
-    search(1, best, resources, robots, blueprint, maxStuff);
+    unordered_set<long long> seen;
+    search(1, best, resources, robots, blueprint, seen);
     return best;
 }
 
