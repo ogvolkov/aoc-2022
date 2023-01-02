@@ -28,9 +28,11 @@ using Blueprint = vector<Composition>;
 
 const int RESOURCE_COUNT = 4;
 
-const int MAX_TIME = 24;
+const int MAX_TIME = 32;
 
 const vector<string> resourceNames = { "ore", "clay", "obsidian", "geode"};
+
+static int maxRes = 0;
 
 void search(int time, int result, int& best, vector<int>& resources, vector<int>& robots, const Blueprint& blueprint, const vector<int>& maxReq, unordered_map<long long, int>& memo) {    
     if (time > MAX_TIME) return;
@@ -97,9 +99,8 @@ int eval(const Blueprint& blueprint) {
 }
 
 void calc(const vector<Blueprint>& blueprints) {
-    int result = 0;
-    auto idx = 1;        
-    auto overallStart = chrono::system_clock::now();            
+    int idx = 1;
+    int result = 1;
     for (const auto& blueprint: blueprints) {
         cout << "eval " << idx << endl;
 
@@ -108,11 +109,9 @@ void calc(const vector<Blueprint>& blueprints) {
         auto end = chrono::system_clock::now();
         cout << "in time " << chrono::duration_cast<chrono::milliseconds>(end-start).count() << "ms" << endl;
 
-        result += idx * mx;
-        idx++;        
+        result *= mx;
+        idx++;
     }
-    auto overallEnd = chrono::system_clock::now();
-    cout << "all in time " << chrono::duration_cast<chrono::milliseconds>(overallEnd-overallStart).count() << "ms" << endl;
 
     cout << result << endl;
 }
@@ -161,6 +160,8 @@ int main()
         blueprints.emplace_back(blueprint);
     } 
 
+
+    if (blueprints.size() > 3) blueprints.resize(3);
     calc(blueprints);
 
     return 0;
